@@ -1,0 +1,17 @@
+{
+  "name": "dns-aggregator-worker",
+  "version": "1.0.0",
+  "description": "DNS intelligence aggregator worker consuming from NATS JetStream and writing to sharded RocksDB.",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js",
+    "query-api": "node query_api.js",
+    "export-mmdb": "node export-mmdb.js",
+    "query-ip": "node query_ip.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "nats": "^2.18.0",
+    "rocksdb": "^5.2.1"
+  }
+}
