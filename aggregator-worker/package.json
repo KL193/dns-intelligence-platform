@@ -7,6 +7,7 @@
     "start": "node worker.js",
     "query-api": "node query_api.js",
     "export-mmdb": "node export-mmdb.js",
+    "export-ips": "node export_ips.js",
     "query-ip": "node query_ip.js"
   },
   "dependencies": {

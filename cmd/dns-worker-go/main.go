@@ -65,7 +65,11 @@ func loadConfig() Config {
 		Subject:            getenv("SUBJECT", "dns.feed.v1"),
 		DurableName:        getenv("DURABLE_NAME", "dns_worker"),
 		NumShards:          getenvInt("NUM_SHARDS", 4),
-		DBPath:             getenv("DB_PATH", "./aggregator-data"),
+		// Default DB path matches the Node worker's default
+		// (aggregator-worker/config.js -> path.join(__dirname, 'data')).
+		// This keeps both workers compatible with the same shard layout
+		// while still allowing override via DB_PATH.
+		DBPath:             getenv("DB_PATH", "aggregator-worker/data"),
 		BatchSize:          getenvInt("BATCH_SIZE", 100),
 		DBMaxRetries:       getenvInt("DB_MAX_RETRIES", 3),
 		DBRetryBaseDelayMs: getenvInt("DB_RETRY_BASE_DELAY_MS", 500),

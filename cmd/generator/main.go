@@ -367,22 +367,43 @@ var publicIPPool = []string{
 	"208.67.220.220",
 }
 
+// randomPublicIPv4 returns a random IPv4 address that is not in
+// common private/reserved ranges, so it is very likely to have
+// geo data in public datasets.
+func randomPublicIPv4() string {
+	for {
+		a := rand.Intn(256)
+		b := rand.Intn(256)
+		c := rand.Intn(256)
+		d := rand.Intn(256)
+
+		// Skip private, loopback, link-local, and multicast/reserved ranges.
+		if a == 10 || // 10.0.0.0/8
+			(a == 172 && b >= 16 && b <= 31) || // 172.16.0.0/12
+			(a == 192 && b == 168) || // 192.168.0.0/16
+			a == 127 || // 127.0.0.0/8
+			a == 0 || // 0.0.0.0/8
+			(a == 169 && b == 254) || // 169.254.0.0/16
+			a >= 224 { // multicast and reserved
+			continue
+		}
+
+		return fmt.Sprintf("%d.%d.%d.%d", a, b, c, d)
+	}
+}
+
 func randomIPs(count int) []string {
 	if count < 1 {
 		count = 1
 	}
 	ips := make([]string, 0, count)
 	for i := 0; i < count; i++ {
-		if rand.Float64() < 0.5 {
-			// public IP from pool
+		if rand.Float64() < 0.3 {
+			// well-known public resolvers/CDN IPs
 			ips = append(ips, publicIPPool[rand.Intn(len(publicIPPool))])
 		} else {
-			// private IP
-			if rand.Float64() < 0.5 {
-				ips = append(ips, fmt.Sprintf("10.%d.%d.%d", rand.Intn(256), rand.Intn(256), rand.Intn(256)))
-			} else {
-				ips = append(ips, fmt.Sprintf("192.168.%d.%d", rand.Intn(256), rand.Intn(256)))
-			}
+			// random public IPv4 outside private/reserved ranges
+			ips = append(ips, randomPublicIPv4())
 		}
 	}
 	return ips

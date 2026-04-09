@@ -1,0 +1,104 @@
+version: "3.9"
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    container_name: nats
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"   # NATS client port
+      - "8222:8222"   # HTTP monitoring / health
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  dns-normalizer:
+    image: sandeeplgr/dns_intelligence:go-V1
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - NATS_URL=nats://nats:4222
+      - RAW_SUBJECT=dns.raw.v1
+      - FEED_SUBJECT=dns.feed.v1
+    command: ["/app/normalizer"]
+    restart: always
+
+  dns-aggregator:
+    image: sandeeplgr/dns_intelligence:aggregator-V1
+    depends_on:
+      nats:
+        condition: service_healthy
+      dns-normalizer:
+        condition: service_started
+    environment:
+      - NATS_URL=nats://nats:4222
+      - STREAM_NAME=DNS_FEED
+      - SUBJECT=dns.feed.v1
+      - DURABLE_NAME=dns_worker
+      - NUM_SHARDS=4
+      - DB_PATH=./data
+      - OUTPUT_PATH=./output
+      - MMDB_FILENAME=dns-intel.mmdb
+    volumes:
+      - rocksdb-data:/usr/src/app/data
+      - rocksdb-snapshot:/usr/src/app/snapshot
+      - output-data:/usr/src/app/output
+    restart: always
+
+  # Demo raw DNS generator (optional). In production, real gateways publish to NATS.
+  dns-generator:
+    image: sandeeplgr/dns_intelligence:go-V1
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - NATS_URL=nats://nats:4222
+      - RAW_SUBJECT=dns.raw.v1
+    command: ["/app/raw-gateway-publisher", "-device-id", "gateway-raw-1", "-eps", "50"]
+    restart: always
+
+  # Geo enrichment batch job. Run on demand:
+  #   docker compose -f docker-compose.prod.yml run --rm dns-exporter
+  dns-exporter:
+    image: sandeeplgr/dns_intelligence:go-V1
+    depends_on:
+      dns-aggregator:
+        condition: service_started
+    profiles: ["exporter"]
+    volumes:
+      - output-data:/data
+    command: [
+      "/app/enrich-geo",
+      "-ipv4-csv", "/app/geo-data/geolite2-city-ipv4.csv",
+      "-ipv6-csv", "/app/geo-data/geolite2-city-ipv6.csv",
+      "-input", "/data/dns-intel.mmdb"
+    ]
+    restart: "no"
+
+  # HTTP query API over the enriched MMDB file.
+  # Exposes:
+  #   GET /ip?value=1.2.3.4
+  #   GET /domain?value=example.com
+  dns-query-api:
+    image: sandeeplgr/dns_intelligence:go-V1
+    depends_on:
+      dns-aggregator:
+        condition: service_started
+    volumes:
+      - output-data:/data
+    command: ["/app/dns-query-api", "-mmdb-path", "/data/dns-intel.mmdb", "-listen", ":8080"]
+    ports:
+      - "8080:8080"
+    restart: always
+
+volumes:
+  nats-data:
+  rocksdb-data:
+  rocksdb-snapshot:
+  output-data:
